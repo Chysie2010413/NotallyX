@@ -900,6 +900,7 @@ fun LockedActivity<*>.exportNote(
     mimeType: ExportMimeType,
     exportToFileResultLauncher: ActivityResultLauncher<Intent>,
 ) {
+    baseModel.selectedExportMimeType = mimeType
     val suggestedName =
         (note.title.ifBlank { getString(R.string.note) }) + "." + mimeType.fileExtension
     val intent =
