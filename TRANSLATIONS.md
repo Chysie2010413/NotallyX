@@ -21,7 +21,7 @@ See [Android Translations Converter](https://github.com/Crustack/android-transla
 |----------|----------|
 | 🇺🇸 English | 100% (316/316) |
 | 🇪🇸 Catalan | 20% (65/316) |
-| 🇨🇿 Czech | 96% (305/316) |
+| 🇨🇿 Czech | 99% (313/316) |
 | 🇩🇰 Danish | 21% (69/316) |
 | 🇩🇪 German | 99% (313/316) |
 | 🇬🇷 Greek | 22% (72/316) |
@@ -45,8 +45,8 @@ See [Android Translations Converter](https://github.com/Crustack/android-transla
 | 🇸🇪 Swedish | 19% (63/316) |
 | 🇵🇭 Tagalog | 20% (65/316) |
 | 🇹🇷 Turkish | 23% (73/316) |
-| 🇺🇦 Ukrainian | 20% (65/316) |
+| 🇺🇦 Ukrainian | 99% (313/316) |
 | 🇻🇳 Vietnamese | 33% (107/316) |
-| 🇨🇳 Chinese (Simplified) | 96% (304/316) |
+| 🇨🇳 Chinese (Simplified) | 98% (312/316) |
 | 🇹🇼 Chinese (Traditional) | 93% (294/316) |
 <!-- translations:end -->
