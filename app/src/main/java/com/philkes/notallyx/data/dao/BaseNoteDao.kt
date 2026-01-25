@@ -34,7 +34,7 @@ interface BaseNoteDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insert(baseNote: BaseNote): Long
 
-    @Insert suspend fun insert(baseNotes: List<BaseNote>)
+    @Insert suspend fun insert(baseNotes: List<BaseNote>): List<Long>
 
     @Update(entity = BaseNote::class) suspend fun update(labelsInBaseNotes: List<LabelsInBaseNote>)
 
@@ -128,6 +128,12 @@ interface BaseNoteDao {
 
     @Query("UPDATE BaseNote SET reminders = :reminders WHERE id = :id")
     suspend fun updateReminders(id: Long, reminders: List<Reminder>)
+
+    @Query("UPDATE BaseNote SET spans = :spans WHERE id = :id")
+    suspend fun updateSpans(
+        id: Long,
+        spans: List<com.philkes.notallyx.data.model.SpanRepresentation>,
+    )
 
     /**
      * Both id and position can be invalid.
