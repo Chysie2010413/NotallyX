@@ -19,10 +19,10 @@ import com.philkes.notallyx.data.model.LabelsInBaseNote
 import com.philkes.notallyx.data.model.ListItem
 import com.philkes.notallyx.data.model.Reminder
 import com.philkes.notallyx.data.model.Type
+import com.philkes.notallyx.presentation.getQuantityString
 import com.philkes.notallyx.presentation.showToast
 import com.philkes.notallyx.utils.charLimit
 import com.philkes.notallyx.utils.log
-import kotlin.text.compareTo
 
 data class NoteIdReminder(val id: Long, val reminders: List<Reminder>)
 
@@ -34,7 +34,7 @@ data class NoteReminder(
 )
 
 /** Maximum allowed size of a note body in MB (~340,000 characters) */
-const val MAX_BODY_SIZE_MB = 0.001
+const val MAX_BODY_SIZE_MB = 1.5
 
 @Dao
 interface BaseNoteDao {
@@ -45,7 +45,13 @@ interface BaseNoteDao {
 
     private fun BaseNote.truncated(): Pair<Boolean, BaseNote> {
         return if (body.length > MAX_BODY_CHAR_LENGTH) {
-            return Pair(true, copy(body = body.take(MAX_BODY_CHAR_LENGTH)))
+            return Pair(
+                true,
+                copy(
+                    body = body.take(MAX_BODY_CHAR_LENGTH),
+                    spans = spans.filter { it.isInsideBounds() },
+                ),
+            )
         } else Pair(false, this)
     }
 
@@ -79,17 +85,19 @@ interface BaseNoteDao {
                 }
                 note
             }
-        context.log(
-            TAG,
-            "${truncatedNotes.size} Notes are too big to save, they were truncated to $truncatedCharacterSize characters",
-        )
-        context.showToast(
-            context.getString(
-                R.string.notes_too_big_truncating,
-                truncatedNotes.size,
-                truncatedCharacterSize,
+        if (truncatedNotes.isNotEmpty()) {
+            context.log(
+                TAG,
+                "${truncatedNotes.size} Notes are too big to save, they were truncated to $truncatedCharacterSize characters",
             )
-        )
+            context.showToast(
+                context.getQuantityString(
+                    R.plurals.notes_too_big_truncating,
+                    truncatedNotes.size,
+                    truncatedCharacterSize,
+                )
+            )
+        }
         return insert(notes)
     }
 
@@ -193,6 +201,10 @@ interface BaseNoteDao {
         id: Long,
         spans: List<com.philkes.notallyx.data.model.SpanRepresentation>,
     )
+
+    // Truncate body at DB level without loading the row, to resolve oversized rows safely
+    @Query("UPDATE BaseNote SET body = substr(body, 1, :limit) WHERE id = :id")
+    suspend fun truncateBody(id: Long, limit: Int)
 
     /**
      * Both id and position can be invalid.
