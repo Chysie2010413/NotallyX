@@ -127,9 +127,12 @@ suspend fun ContextWrapper.importZip(
                 var total = baseNoteCursor.count
                 var counter = 1
                 importingBackup?.postValue(ImportProgress(0, total))
+                val originalIds = ArrayList<Long>(baseNoteCursor.count)
                 val baseNotes =
                     baseNoteCursor.toList { cursor ->
                         val baseNote = cursor.toBaseNote()
+                        val originalId = cursor.getLong(cursor.getColumnIndexOrThrow("id"))
+                        originalIds.add(originalId)
                         importingBackup?.postValue(ImportProgress(counter++, total))
                         baseNote
                     }
@@ -192,7 +195,7 @@ suspend fun ContextWrapper.importZip(
 
                 val notallyDatabase =
                     NotallyDatabase.getDatabase(this@importZip, observePreferences = false).value
-                notallyDatabase.getCommonDao().importBackup(baseNotes, labels)
+                notallyDatabase.getCommonDao().importBackup(baseNotes, originalIds, labels)
                 val reminders = notallyDatabase.getBaseNoteDao().getAllReminders()
                 cancelNoteReminders(reminders)
                 scheduleNoteReminders(reminders)
