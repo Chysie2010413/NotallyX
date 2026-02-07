@@ -419,7 +419,8 @@ class BaseNoteVH(
                 val isElapsed = reminder.dateTime < now
                 alpha = if (isElapsed) 0.5f else 1.0f
                 paintFlags =
-                    if (isElapsed) paintFlags or Paint.STRIKE_THRU_TEXT_FLAG else paintFlags
+                    if (isElapsed) paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
+                    else paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv()
             }
         }
     }
