@@ -40,8 +40,4 @@ class ConfigureWidgetActivity : PickNoteActivity() {
             finish()
         }
     }
-
-    override fun onReminderClick(position: Int) {
-        onClick(position)
-    }
 }

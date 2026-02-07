@@ -6,5 +6,5 @@ interface ItemListener {
 
     fun onLongClick(position: Int)
 
-    fun onReminderClick(position: Int)
+    fun onReminderClick(position: Int) {}
 }
