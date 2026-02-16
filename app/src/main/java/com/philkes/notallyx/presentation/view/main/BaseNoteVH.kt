@@ -25,6 +25,7 @@ import com.philkes.notallyx.data.model.FileAttachment
 import com.philkes.notallyx.data.model.ListItem
 import com.philkes.notallyx.data.model.SpanRepresentation
 import com.philkes.notallyx.data.model.Type
+import com.philkes.notallyx.data.model.findNextNotificationDate
 import com.philkes.notallyx.data.model.toText
 import com.philkes.notallyx.databinding.RecyclerBaseNoteBinding
 import com.philkes.notallyx.presentation.applySpans
@@ -408,24 +409,21 @@ class BaseNoteVH(
 
     private fun setupReminderChip(baseNote: BaseNote) {
         val now = Date(System.currentTimeMillis())
-        val displayReminder =
-            baseNote.reminders.filter { it.dateTime > now }.minByOrNull { it.dateTime }
-                ?: baseNote.reminders.maxByOrNull { it.dateTime }
-
-        if (displayReminder == null) {
+        val mostRecentNotificationDate =
+            baseNote.reminders.findNextNotificationDate()
+                ?: baseNote.reminders.maxOfOrNull { it.dateTime }
+        if (mostRecentNotificationDate == null) {
             binding.ReminderChip.visibility = GONE
             return
         }
-        displayReminder.let { reminder ->
-            binding.ReminderChip.apply {
-                visibility = VISIBLE
-                text = reminder.dateTime.toText()
-                val isElapsed = reminder.dateTime < now
-                alpha = if (isElapsed) 0.5f else 1.0f
-                paintFlags =
-                    if (isElapsed) paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
-                    else paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv()
-            }
+        binding.ReminderChip.apply {
+            visibility = VISIBLE
+            text = mostRecentNotificationDate.toText()
+            val isElapsed = mostRecentNotificationDate < now
+            alpha = if (isElapsed) 0.5f else 1.0f
+            paintFlags =
+                if (isElapsed) paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
+                else paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv()
         }
     }
 }
