@@ -40,6 +40,7 @@ abstract class LockedActivity<T : ViewBinding> : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        initViewModel()
         notallyXApplication = (application as NotallyXApplication)
         preferences = NotallyXPreferences.getInstance(notallyXApplication)
         if (preferences.useDynamicColors.value) {
@@ -61,6 +62,49 @@ abstract class LockedActivity<T : ViewBinding> : AppCompatActivity() {
                 }
             }
     }
+
+    open fun initViewModel() {
+        baseModel.startObserving()
+    }
+
+    private fun setupGlobalExceptionHandler() {
+        Thread.setDefaultUncaughtExceptionHandler { _, throwable ->
+            lifecycleScope.launch {
+                EXCEPTION_HANDLER_MUTEX.withLock {
+                    val time = System.currentTimeMillis()
+                    if (
+                        isExceptionAlreadyBeingHandled(time) &&
+                            (throwable is SQLiteBlobTooBigException ||
+                                throwable.cause is SQLiteBlobTooBigException)
+                    ) {
+                        EXCEPTION_HANDLER_MUTEX_LAST_TIMESTAMP = time
+                        val migrationProgress =
+                            MutableLiveData<MigrationProgress>().apply {
+                                setupProgressDialog(this@LockedActivity)
+                                postValue(
+                                    MigrationProgress(
+                                        R.string.migration_splitting_notes,
+                                        indeterminate = true,
+                                    )
+                                )
+                            }
+                        log(
+                            TAG,
+                            msg =
+                                "SQLiteBlobTooBigException occurred, trying to fix broken notes...",
+                        )
+                        withContext(Dispatchers.IO) { application.splitOversizedNotes() }
+                        migrationProgress.postValue(
+                            MigrationProgress(R.string.migrating_data, inProgress = false)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun isExceptionAlreadyBeingHandled(time: Long): Boolean =
+        EXCEPTION_HANDLER_MUTEX_LAST_TIMESTAMP?.let { it.secondsBetween(time) > 20 } ?: true
 
     override fun onResume() {
         if (preferences.isLockEnabled) {
