@@ -114,9 +114,9 @@ class BaseNoteModel(private val app: Application) : AndroidViewModel(app) {
     var reminders: LiveData<List<NoteReminder>> = NotNullLiveData(mutableListOf())
     private var allNotes: LiveData<List<BaseNote>>? = NotNullLiveData(mutableListOf())
     private var allNotesObserver: Observer<List<BaseNote>>? = null
-    var baseNotes: Content? = Content(MutableLiveData(), { t -> t })
-    var deletedNotes: Content? = Content(MutableLiveData(), { t -> t })
-    var archivedNotes: Content? = Content(MutableLiveData(), { t -> t })
+    var baseNotes: Content? = Content(MutableLiveData(), ::transform)
+    var deletedNotes: Content? = Content(MutableLiveData(), ::transform)
+    var archivedNotes: Content? = Content(MutableLiveData(), ::transform)
 
     val folder = NotNullLiveData(Folder.NOTES)
 

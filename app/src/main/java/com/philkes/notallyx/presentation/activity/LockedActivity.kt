@@ -80,43 +80,47 @@ abstract class LockedActivity<T : ViewBinding> : AppCompatActivity() {
     }
 
     private fun setupGlobalExceptionHandler() {
-        Thread.setDefaultUncaughtExceptionHandler { _, throwable ->
-            lifecycleScope.launch {
-                EXCEPTION_HANDLER_MUTEX.withLock {
-                    val time = System.currentTimeMillis()
-                    if (
-                        isExceptionAlreadyBeingHandled(time) &&
-                            (throwable is SQLiteBlobTooBigException ||
-                                throwable.cause is SQLiteBlobTooBigException)
-                    ) {
-                        EXCEPTION_HANDLER_MUTEX_LAST_TIMESTAMP = time
-                        val migrationProgress =
-                            MutableLiveData<MigrationProgress>().apply {
-                                setupProgressDialog(this@LockedActivity)
-                                postValue(
-                                    MigrationProgress(
-                                        R.string.migration_splitting_notes,
-                                        indeterminate = true,
+        val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            if (
+                throwable is SQLiteBlobTooBigException ||
+                    throwable.cause is SQLiteBlobTooBigException
+            ) {
+                lifecycleScope.launch {
+                    EXCEPTION_HANDLER_MUTEX.withLock {
+                        val time = System.currentTimeMillis()
+                        if (!isExceptionAlreadyBeingHandled(time)) {
+                            EXCEPTION_HANDLER_MUTEX_LAST_TIMESTAMP = time
+                            val migrationProgress =
+                                MutableLiveData<MigrationProgress>().apply {
+                                    setupProgressDialog(this@LockedActivity)
+                                    postValue(
+                                        MigrationProgress(
+                                            R.string.migration_splitting_notes,
+                                            indeterminate = true,
+                                        )
                                     )
-                                )
-                            }
-                        log(
-                            TAG,
-                            msg =
-                                "SQLiteBlobTooBigException occurred, trying to fix broken notes...",
-                        )
-                        withContext(Dispatchers.IO) { application.splitOversizedNotes() }
-                        migrationProgress.postValue(
-                            MigrationProgress(R.string.migrating_data, inProgress = false)
-                        )
+                                }
+                            log(
+                                TAG,
+                                msg =
+                                    "SQLiteBlobTooBigException occurred, trying to fix broken notes...",
+                            )
+                            withContext(Dispatchers.IO) { application.splitOversizedNotes() }
+                            migrationProgress.postValue(
+                                MigrationProgress(R.string.migrating_data, inProgress = false)
+                            )
+                        }
                     }
                 }
+            } else {
+                previousHandler?.uncaughtException(thread, throwable)
             }
         }
     }
 
     private fun isExceptionAlreadyBeingHandled(time: Long): Boolean =
-        EXCEPTION_HANDLER_MUTEX_LAST_TIMESTAMP?.let { it.secondsBetween(time) > 20 } ?: true
+        EXCEPTION_HANDLER_MUTEX_LAST_TIMESTAMP?.let { it.secondsBetween(time) < 20 } ?: false
 
     override fun onResume() {
         if (preferences.isLockEnabled) {
