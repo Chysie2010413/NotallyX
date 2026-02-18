@@ -3,6 +3,7 @@ package com.philkes.notallyx.presentation.activity.note.reminders
 import android.app.AlarmManager
 import android.app.Application
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -12,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.getSystemService
 import com.philkes.notallyx.R
 import com.philkes.notallyx.data.NotallyDatabase
+import com.philkes.notallyx.data.dao.BaseNoteDao
 import com.philkes.notallyx.data.model.Reminder
 import com.philkes.notallyx.utils.canScheduleAlarms
 import com.philkes.notallyx.utils.cancelReminder
@@ -46,9 +48,12 @@ class ReminderReceiver : BroadcastReceiver() {
             val noteId = intent.getLongExtra(EXTRA_NOTE_ID, -1L)
             notify(context, noteId, reminderId)
         } else {
+            val baseNoteDao = getDatabase(context).getBaseNoteDao()
             when {
-                canScheduleExactAlarms && intent.action == Intent.ACTION_BOOT_COMPLETED ->
+                canScheduleExactAlarms && intent.action == Intent.ACTION_BOOT_COMPLETED -> {
                     rescheduleAlarms(context)
+                    restoreRemindersNotifications(context, baseNoteDao)
+                }
 
                 intent.action ==
                     AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED -> {
@@ -58,6 +63,14 @@ class ReminderReceiver : BroadcastReceiver() {
                         cancelAlarms(context)
                     }
                 }
+                intent.action == ACTION_NOTIFICATION_DISMISSED -> {
+                    val noteId = intent.getLongExtra(EXTRA_NOTE_ID, -1L)
+                    val reminderId = intent.getLongExtra(EXTRA_REMINDER_ID, -1L)
+                    Log.d(TAG, "Notification dismissed for note: $noteId")
+                    CoroutineScope(Dispatchers.IO).launch {
+                        setIsNotificationVisible(false, baseNoteDao, noteId, reminderId)
+                    }
+                }
             }
         }
     }
@@ -65,8 +78,7 @@ class ReminderReceiver : BroadcastReceiver() {
     private fun notify(context: Context, noteId: Long, reminderId: Long) {
         Log.d(TAG, "notify: noteId: $noteId reminderId: $reminderId")
         CoroutineScope(Dispatchers.IO).launch {
-            val database =
-                NotallyDatabase.getDatabase(context.applicationContext as Application, false).value
+            val database = getDatabase(context)
             val manager = context.getSystemService<NotificationManager>()!!
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 manager.createChannelIfNotExists(
@@ -86,12 +98,19 @@ class ReminderReceiver : BroadcastReceiver() {
                             context.getString(R.string.open_note),
                             context.getOpenNotePendingIntent(note),
                         )
+                        .setDeleteIntent(getDeletePendingIntent(context, noteId, reminderId))
                         .build()
                 note.reminders
                     .find { it.id == reminderId }
                     ?.let { reminder: Reminder ->
                         manager.notify(note.id.toString(), reminderId.toInt(), notification)
                         context.scheduleReminder(note.id, reminder, forceRepetition = true)
+                        setIsNotificationVisible(
+                            true,
+                            database.getBaseNoteDao(),
+                            note.id,
+                            reminderId,
+                        )
                     }
             }
         }
@@ -99,8 +118,7 @@ class ReminderReceiver : BroadcastReceiver() {
 
     private fun rescheduleAlarms(context: Context) {
         CoroutineScope(Dispatchers.IO).launch {
-            val database =
-                NotallyDatabase.getDatabase(context.applicationContext as Application, false).value
+            val database = getDatabase(context)
             val now = Date()
             val noteReminders = database.getBaseNoteDao().getAllReminders()
             val noteRemindersWithFutureNotify =
@@ -120,8 +138,7 @@ class ReminderReceiver : BroadcastReceiver() {
 
     private fun cancelAlarms(context: Context) {
         CoroutineScope(Dispatchers.IO).launch {
-            val database =
-                NotallyDatabase.getDatabase(context.applicationContext as Application, false).value
+            val database = getDatabase(context)
             val noteReminders = database.getBaseNoteDao().getAllReminders()
             val noteRemindersWithFutureNotify =
                 noteReminders.flatMap { (noteId, reminders) ->
@@ -134,6 +151,66 @@ class ReminderReceiver : BroadcastReceiver() {
         }
     }
 
+    private suspend fun setIsNotificationVisible(
+        isNotificationVisible: Boolean,
+        baseNoteDao: BaseNoteDao,
+        noteId: Long,
+        reminderId: Long,
+    ) {
+        val note = baseNoteDao.get(noteId) ?: return
+        val currentReminders = note.reminders.toMutableList()
+        val index = currentReminders.indexOfFirst { it.id == reminderId }
+        if (index != -1) {
+            if (currentReminders[index].isNotificationVisible != isNotificationVisible) {
+                currentReminders[index] =
+                    currentReminders[index].copy(isNotificationVisible = isNotificationVisible)
+                baseNoteDao.updateReminders(noteId, currentReminders)
+            }
+        }
+    }
+
+    private fun getDeletePendingIntent(
+        context: Context,
+        noteId: Long,
+        reminderId: Long,
+    ): PendingIntent {
+        val deleteIntent =
+            Intent(context, ReminderReceiver::class.java).apply {
+                action = ACTION_NOTIFICATION_DISMISSED
+                putExtra(EXTRA_NOTE_ID, noteId)
+                putExtra(EXTRA_REMINDER_ID, reminderId)
+            }
+
+        val deletePendingIntent =
+            PendingIntent.getBroadcast(
+                context,
+                "$noteId-$reminderId".hashCode(),
+                deleteIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+        return deletePendingIntent
+    }
+
+    fun restoreRemindersNotifications(context: Context, baseNoteDao: BaseNoteDao) {
+        CoroutineScope(Dispatchers.IO).launch {
+            val allNotes = baseNoteDao.getAllNotes()
+            allNotes.forEach { note ->
+                val now = Date(System.currentTimeMillis())
+                val mostRecentReminder =
+                    note.reminders
+                        .filter { it.dateTime <= now } // Only reminders that have already passed
+                        .maxByOrNull { it.dateTime } ?: return@forEach
+                if (mostRecentReminder.isNotificationVisible) {
+                    notify(context, note.id, mostRecentReminder.id)
+                }
+            }
+        }
+    }
+
+    private fun getDatabase(context: Context): NotallyDatabase {
+        return NotallyDatabase.getDatabase(context.applicationContext as Application, false).value
+    }
+
     companion object {
         private const val TAG = "ReminderReceiver"
 
@@ -141,5 +218,7 @@ class ReminderReceiver : BroadcastReceiver() {
 
         const val EXTRA_REMINDER_ID = "notallyx.intent.extra.REMINDER_ID"
         const val EXTRA_NOTE_ID = "notallyx.intent.extra.NOTE_ID"
+        const val ACTION_NOTIFICATION_DISMISSED =
+            "com.philkes.notallyx.ACTION_NOTIFICATION_DISMISSED"
     }
 }
