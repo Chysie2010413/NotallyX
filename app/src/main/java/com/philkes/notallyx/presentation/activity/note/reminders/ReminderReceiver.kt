@@ -108,10 +108,10 @@ class ReminderReceiver : BroadcastReceiver() {
             note.reminders
                 .find { it.id == reminderId }
                 ?.let { reminder: Reminder ->
+                    setIsNotificationVisible(true, context, note.id, reminderId)
                     manager.notify(note.id.toString(), reminderId.toInt(), notification)
                     if (schedule)
                         context.scheduleReminder(note.id, reminder, forceRepetition = true)
-                    setIsNotificationVisible(true, context, note.id, reminderId)
                 }
         }
     }
