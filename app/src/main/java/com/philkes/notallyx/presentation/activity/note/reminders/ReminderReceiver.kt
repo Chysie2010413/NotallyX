@@ -13,7 +13,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.getSystemService
 import com.philkes.notallyx.R
 import com.philkes.notallyx.data.NotallyDatabase
-import com.philkes.notallyx.data.dao.BaseNoteDao
 import com.philkes.notallyx.data.model.Reminder
 import com.philkes.notallyx.utils.canScheduleAlarms
 import com.philkes.notallyx.utils.cancelReminder
@@ -40,123 +39,115 @@ class ReminderReceiver : BroadcastReceiver() {
             return
         }
         val canScheduleExactAlarms = context.canScheduleAlarms()
-        if (intent.action == null) {
-            if (!canScheduleExactAlarms) {
-                return
-            }
-            val reminderId = intent.getLongExtra(EXTRA_REMINDER_ID, -1L)
-            val noteId = intent.getLongExtra(EXTRA_NOTE_ID, -1L)
-            notify(context, noteId, reminderId)
-        } else {
-            val baseNoteDao = getDatabase(context).getBaseNoteDao()
-            when {
-                canScheduleExactAlarms && intent.action == Intent.ACTION_BOOT_COMPLETED -> {
-                    rescheduleAlarms(context)
-                    restoreRemindersNotifications(context, baseNoteDao)
+        goAsyncScope {
+            if (intent.action == null) {
+                if (!canScheduleExactAlarms) {
+                    return@goAsyncScope
                 }
-
-                intent.action ==
-                    AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED -> {
-                    if (canScheduleExactAlarms) {
-                        rescheduleAlarms(context)
-                    } else {
-                        cancelAlarms(context)
-                    }
-                }
-                intent.action == ACTION_NOTIFICATION_DISMISSED -> {
-                    val noteId = intent.getLongExtra(EXTRA_NOTE_ID, -1L)
-                    val reminderId = intent.getLongExtra(EXTRA_REMINDER_ID, -1L)
-                    Log.d(TAG, "Notification dismissed for note: $noteId")
-                    CoroutineScope(Dispatchers.IO).launch {
-                        setIsNotificationVisible(false, baseNoteDao, noteId, reminderId)
-                    }
-                }
-            }
-        }
-    }
-
-    private fun notify(context: Context, noteId: Long, reminderId: Long) {
-        Log.d(TAG, "notify: noteId: $noteId reminderId: $reminderId")
-        CoroutineScope(Dispatchers.IO).launch {
-            val database = getDatabase(context)
-            val manager = context.getSystemService<NotificationManager>()!!
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                manager.createChannelIfNotExists(
-                    NOTIFICATION_CHANNEL_ID,
-                    importance = NotificationManager.IMPORTANCE_HIGH,
-                )
-            }
-            database.getBaseNoteDao().get(noteId)?.let { note ->
-                val notification =
-                    NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
-                        .setSmallIcon(R.drawable.notebook)
-                        .setContentTitle(note.title) // Set title from intent
-                        .setContentText(note.body.truncate(200)) // Set content text from intent
-                        .setPriority(NotificationCompat.PRIORITY_HIGH)
-                        .addAction(
-                            R.drawable.visibility,
-                            context.getString(R.string.open_note),
-                            context.getOpenNotePendingIntent(note),
-                        )
-                        .setDeleteIntent(getDeletePendingIntent(context, noteId, reminderId))
-                        .build()
-                note.reminders
-                    .find { it.id == reminderId }
-                    ?.let { reminder: Reminder ->
-                        manager.notify(note.id.toString(), reminderId.toInt(), notification)
-                        context.scheduleReminder(note.id, reminder, forceRepetition = true)
-                        setIsNotificationVisible(
-                            true,
-                            database.getBaseNoteDao(),
-                            note.id,
-                            reminderId,
-                        )
-                    }
-            }
-        }
-    }
-
-    private fun rescheduleAlarms(context: Context) {
-        CoroutineScope(Dispatchers.IO).launch {
-            val database = getDatabase(context)
-            val now = Date()
-            val noteReminders = database.getBaseNoteDao().getAllReminders()
-            val noteRemindersWithFutureNotify =
-                noteReminders.flatMap { (noteId, reminders) ->
-                    reminders
-                        .filter { reminder ->
-                            reminder.repetition != null || reminder.dateTime.after(now)
+                val reminderId = intent.getLongExtra(EXTRA_REMINDER_ID, -1L)
+                val noteId = intent.getLongExtra(EXTRA_NOTE_ID, -1L)
+                notify(context, noteId, reminderId)
+            } else {
+                when {
+                    intent.action == Intent.ACTION_BOOT_COMPLETED -> {
+                        if (canScheduleExactAlarms) {
+                            rescheduleAlarms(context)
                         }
-                        .map { reminder -> Pair(noteId, reminder) }
+                        restoreRemindersNotifications(context)
+                    }
+
+                    intent.action ==
+                        AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED -> {
+                        if (canScheduleExactAlarms) {
+                            rescheduleAlarms(context)
+                        } else {
+                            cancelAlarms(context)
+                        }
+                    }
+
+                    intent.action == ACTION_NOTIFICATION_DISMISSED -> {
+                        val noteId = intent.getLongExtra(EXTRA_NOTE_ID, -1L)
+                        val reminderId = intent.getLongExtra(EXTRA_REMINDER_ID, -1L)
+                        Log.d(TAG, "Notification dismissed for note: $noteId")
+                        setIsNotificationVisible(false, context, noteId, reminderId)
+                    }
                 }
-            Log.d(TAG, "rescheduleAlarms: ${noteRemindersWithFutureNotify.size} alarms")
-            noteRemindersWithFutureNotify.forEach { (noteId, reminder) ->
-                context.scheduleReminder(noteId, reminder)
             }
         }
     }
 
-    private fun cancelAlarms(context: Context) {
-        CoroutineScope(Dispatchers.IO).launch {
-            val database = getDatabase(context)
-            val noteReminders = database.getBaseNoteDao().getAllReminders()
-            val noteRemindersWithFutureNotify =
-                noteReminders.flatMap { (noteId, reminders) ->
-                    reminders.map { reminder -> Pair(noteId, reminder.id) }
+    private suspend fun notify(context: Context, noteId: Long, reminderId: Long) {
+        Log.d(TAG, "notify: noteId: $noteId reminderId: $reminderId")
+        val database = getDatabase(context)
+        val manager = context.getSystemService<NotificationManager>()!!
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            manager.createChannelIfNotExists(
+                NOTIFICATION_CHANNEL_ID,
+                importance = NotificationManager.IMPORTANCE_HIGH,
+            )
+        }
+        database.getBaseNoteDao().get(noteId)?.let { note ->
+            val notification =
+                NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
+                    .setSmallIcon(R.drawable.notebook)
+                    .setContentTitle(note.title) // Set title from intent
+                    .setContentText(note.body.truncate(200)) // Set content text from intent
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .addAction(
+                        R.drawable.visibility,
+                        context.getString(R.string.open_note),
+                        context.getOpenNotePendingIntent(note),
+                    )
+                    .setDeleteIntent(getDeletePendingIntent(context, noteId, reminderId))
+                    .build()
+            note.reminders
+                .find { it.id == reminderId }
+                ?.let { reminder: Reminder ->
+                    manager.notify(note.id.toString(), reminderId.toInt(), notification)
+                    context.scheduleReminder(note.id, reminder, forceRepetition = true)
+                    setIsNotificationVisible(true, context, note.id, reminderId)
                 }
-            Log.d(TAG, "cancelAlarms: ${noteRemindersWithFutureNotify.size} alarms")
-            noteRemindersWithFutureNotify.forEach { (noteId, reminderId) ->
-                context.cancelReminder(noteId, reminderId)
+        }
+    }
+
+    private suspend fun rescheduleAlarms(context: Context) {
+        val database = getDatabase(context)
+        val now = Date()
+        val noteReminders = database.getBaseNoteDao().getAllReminders()
+        val noteRemindersWithFutureNotify =
+            noteReminders.flatMap { (noteId, reminders) ->
+                reminders
+                    .filter { reminder ->
+                        reminder.repetition != null || reminder.dateTime.after(now)
+                    }
+                    .map { reminder -> Pair(noteId, reminder) }
             }
+        Log.d(TAG, "rescheduleAlarms: ${noteRemindersWithFutureNotify.size} alarms")
+        noteRemindersWithFutureNotify.forEach { (noteId, reminder) ->
+            context.scheduleReminder(noteId, reminder)
+        }
+    }
+
+    private suspend fun cancelAlarms(context: Context) {
+        val database = getDatabase(context)
+        val noteReminders = database.getBaseNoteDao().getAllReminders()
+        val noteRemindersWithFutureNotify =
+            noteReminders.flatMap { (noteId, reminders) ->
+                reminders.map { reminder -> Pair(noteId, reminder.id) }
+            }
+        Log.d(TAG, "cancelAlarms: ${noteRemindersWithFutureNotify.size} alarms")
+        noteRemindersWithFutureNotify.forEach { (noteId, reminderId) ->
+            context.cancelReminder(noteId, reminderId)
         }
     }
 
     private suspend fun setIsNotificationVisible(
         isNotificationVisible: Boolean,
-        baseNoteDao: BaseNoteDao,
+        context: Context,
         noteId: Long,
         reminderId: Long,
     ) {
+        val baseNoteDao = getDatabase(context).getBaseNoteDao()
         val note = baseNoteDao.get(noteId) ?: return
         val currentReminders = note.reminders.toMutableList()
         val index = currentReminders.indexOfFirst { it.id == reminderId }
@@ -180,35 +171,44 @@ class ReminderReceiver : BroadcastReceiver() {
                 putExtra(EXTRA_NOTE_ID, noteId)
                 putExtra(EXTRA_REMINDER_ID, reminderId)
             }
-
         val deletePendingIntent =
             PendingIntent.getBroadcast(
                 context,
-                "$noteId-$reminderId".hashCode(),
+                noteId.toInt(),
                 deleteIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
         return deletePendingIntent
     }
 
-    fun restoreRemindersNotifications(context: Context, baseNoteDao: BaseNoteDao) {
-        CoroutineScope(Dispatchers.IO).launch {
-            val allNotes = baseNoteDao.getAllNotes()
-            allNotes.forEach { note ->
-                val now = Date(System.currentTimeMillis())
-                val mostRecentReminder =
-                    note.reminders
-                        .filter { it.dateTime <= now } // Only reminders that have already passed
-                        .maxByOrNull { it.dateTime } ?: return@forEach
-                if (mostRecentReminder.isNotificationVisible) {
-                    notify(context, note.id, mostRecentReminder.id)
-                }
+    private suspend fun restoreRemindersNotifications(context: Context) {
+        val baseNoteDao = getDatabase(context).getBaseNoteDao()
+        val allNotes = baseNoteDao.getAllNotes()
+        allNotes.forEach { note ->
+            val now = Date(System.currentTimeMillis())
+            val mostRecentReminder =
+                note.reminders
+                    .filter { it.dateTime <= now } // Only reminders that have already passed
+                    .maxByOrNull { it.dateTime } ?: return@forEach
+            if (mostRecentReminder.isNotificationVisible) {
+                notify(context, note.id, mostRecentReminder.id)
             }
         }
     }
 
     private fun getDatabase(context: Context): NotallyDatabase {
         return NotallyDatabase.getDatabase(context.applicationContext as Application, false).value
+    }
+
+    private fun goAsyncScope(codeBlock: suspend CoroutineScope.() -> Unit) {
+        val pendingResult = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                codeBlock()
+            } finally {
+                pendingResult.finish()
+            }
+        }
     }
 
     companion object {
