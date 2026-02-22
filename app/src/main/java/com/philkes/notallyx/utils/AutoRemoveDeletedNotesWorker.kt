@@ -39,7 +39,7 @@ suspend fun ContextWrapper.removeOldDeletedNotes(): ListenableWorker.Result {
 
     Log.d(
         AutoRemoveDeletedNotesWorker.TAG,
-        "Removing notes that have been deleted for $days days or more (since: ${Date(before).format()}",
+        "Removing notes that have been deleted for $days days or more (since: ${Date(before).format()})",
     )
 
     val database = NotallyDatabase.getFreshDatabase(this, preferences.dataInPublicFolder.value)
