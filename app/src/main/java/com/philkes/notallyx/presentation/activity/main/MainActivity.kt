@@ -9,6 +9,7 @@ import android.view.Menu.CATEGORY_SYSTEM
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -117,7 +118,7 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
                     }
                     if (
                         !isStartViewFragment &&
-                            !intent.getBooleanExtra(EXTRA_SKIP_START_VIEW_ON_BACK, false)
+                        !intent.getBooleanExtra(EXTRA_SKIP_START_VIEW_ON_BACK, false)
                     ) {
                         navigateToStartView()
                     } else {
@@ -134,7 +135,6 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
     override fun initViewModel() {}
 
     private fun checkForMigrations(savedInstanceState: Bundle?) {
-        // Run migrations first (blocking dialog), then proceed with initial navigation
         val proceed: () -> Unit = {
             baseModel.startObserving()
             val fragmentIdToLoad = intent.getIntExtra(EXTRA_FRAGMENT_TO_OPEN, -1)
@@ -148,14 +148,12 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
             val migrationProgress = MutableLiveData<MigrationProgress>()
             migrationProgress.setupProgressDialog(this)
             lifecycleScope.launch {
-                // Initial title
                 migrationProgress.postValue(
                     MigrationProgress(R.string.migrating_data, indeterminate = true)
                 )
                 application.runMigrations { titleId ->
                     migrationProgress.postValue(MigrationProgress(titleId, indeterminate = true))
                 }
-                // Dismiss
                 migrationProgress.postValue(
                     MigrationProgress(R.string.migrating_data, inProgress = false)
                 )
@@ -173,8 +171,9 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
             val systemBarsInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
 
-            // Apply padding to the main content views
-            // Top margin for the Toolbar to avoid being under the status bar
+            // 检查当前是否在搜索页面
+            val isInSearch = navController.currentDestination?.id == R.id.Search
+
             binding.Toolbar.apply {
                 (layoutParams as ViewGroup.MarginLayoutParams).topMargin = systemBarsInsets.top
                 requestLayout()
@@ -185,33 +184,28 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
                 requestLayout()
             }
 
-            // Apply padding to the navigationview top header
             binding.NavigationView.getHeaderView(0).apply {
                 (layoutParams as ViewGroup.MarginLayoutParams).topMargin = systemBarsInsets.top
                 requestLayout()
             }
 
-            // TakeNote FAB is at the very bottom
             binding.TakeNote.apply {
                 val marginLayoutParams = layoutParams as ViewGroup.MarginLayoutParams
-                marginLayoutParams.bottomMargin = 16.dp + systemBarsInsets.bottom + imeInsets.bottom
+                // 如果是搜索页，锁定位置（不加键盘高度）；否则正常随键盘弹起
+                val finalBottomIme = if (isInSearch) 0 else imeInsets.bottom
+                marginLayoutParams.bottomMargin = 16.dp + systemBarsInsets.bottom + finalBottomIme
                 marginLayoutParams.marginEnd = 16.dp
                 requestLayout()
             }
 
-            // The ActionMode toolbar's position will naturally be below the Toolbar,
-            // so its top offset is handled by the Toolbar's adjustment.
-
-            // The main content (NavHostFragment) needs bottom padding to avoid
-            // being obscured by the system navigation bar and the keyboard.
-            // If NavHostFragment contains a ScrollView/RecyclerView, you might apply
-            // this padding to that scrollable view instead for better behavior.
             navHostFragment.apply {
+                // 如果是搜索页，锁定底部内边距，防止内容被顶起压缩
+                val finalBottomIme = if (isInSearch) 0 else imeInsets.bottom
                 setPadding(
                     paddingLeft,
                     paddingTop,
                     paddingRight,
-                    systemBarsInsets.bottom + imeInsets.bottom,
+                    systemBarsInsets.bottom + finalBottomIme,
                 )
             }
             insets
@@ -331,11 +325,11 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
         labelsMoreMenuItem =
             if (labelsMenuItems.size > maxLabelsToDisplay) {
                 add(
-                        1,
-                        R.id.Labels,
-                        CATEGORY_CONTAINER + labelsMenuItems.size + 2,
-                        getString(R.string.more, labelsMenuItems.size - maxLabelsToDisplay),
-                    )
+                    1,
+                    R.id.Labels,
+                    CATEGORY_CONTAINER + labelsMenuItems.size + 2,
+                    getString(R.string.more, labelsMenuItems.size - maxLabelsToDisplay),
+                )
                     .setCheckable(true)
                     .setIcon(R.drawable.label)
             } else null
@@ -405,10 +399,10 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
             val folderFrom = baseModel.actionMode.getFirstNote().folder
             val ids = baseModel.moveBaseNotes(folderTo)
             Snackbar.make(
-                    findViewById(R.id.DrawerLayout),
-                    getQuantityString(folderTo.movedToResId(), ids.size),
-                    Snackbar.LENGTH_SHORT,
-                )
+                findViewById(R.id.DrawerLayout),
+                getQuantityString(folderTo.movedToResId(), ids.size),
+                Snackbar.LENGTH_SHORT,
+            )
                 .apply { setAction(R.string.undo) { baseModel.moveBaseNotes(ids, folderFrom) } }
                 .show()
         } finally {
@@ -526,7 +520,7 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
                 override fun onDrawerClosed(drawerView: View) {
                     if (
                         fragmentIdToLoad != null &&
-                            navController.currentDestination?.id != fragmentIdToLoad
+                        navController.currentDestination?.id != fragmentIdToLoad
                     ) {
                         navigateWithAnimation(
                             requireNotNull(fragmentIdToLoad, { "fragmentIdToLoad is null" })
@@ -555,14 +549,19 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
                     binding.NavigationView.setCheckedItem(destination.id)
                 }
             }
+
+            // 搜索页特殊处理：锁定输入法模式为平移，避免图标被顶起
+            if (destination.id == R.id.Search) {
+                window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN)
+            } else {
+                window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            }
+
             when (destination.id) {
-                R.id.Notes,
-                R.id.DisplayLabel,
-                R.id.Unlabeled -> {
+                R.id.Notes, R.id.DisplayLabel, R.id.Unlabeled -> {
                     binding.TakeNote.show()
                     binding.MakeList.show()
                 }
-
                 else -> {
                     binding.TakeNote.hide()
                     binding.MakeList.hide()
@@ -575,21 +574,22 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
     private fun isStartViewFragment(id: Int, bundle: Bundle?): Boolean {
         val (startViewId, startViewBundle) = getStartViewNavigation()
         return startViewId == id &&
-            startViewBundle.getString(EXTRA_DISPLAYED_LABEL) ==
+                startViewBundle.getString(EXTRA_DISPLAYED_LABEL) ==
                 bundle?.getString(EXTRA_DISPLAYED_LABEL)
     }
 
     private fun navigateWithAnimation(id: Int) {
-        val options = navOptions {
-            launchSingleTop = true
-            anim {
-                exit = androidx.navigation.ui.R.anim.nav_default_exit_anim
-                enter = androidx.navigation.ui.R.anim.nav_default_enter_anim
-                popExit = androidx.navigation.ui.R.anim.nav_default_pop_exit_anim
-                popEnter = androidx.navigation.ui.R.anim.nav_default_pop_enter_anim
+        val options =
+            navOptions {
+                launchSingleTop = true
+                anim {
+                    exit = androidx.navigation.ui.R.anim.nav_default_exit_anim
+                    enter = androidx.navigation.ui.R.anim.nav_default_enter_anim
+                    popExit = androidx.navigation.ui.R.anim.nav_default_pop_exit_anim
+                    popEnter = androidx.navigation.ui.R.anim.nav_default_pop_enter_anim
+                }
+                popUpTo(navController.graph.startDestination) { inclusive = false }
             }
-            popUpTo(navController.graph.startDestination) { inclusive = false }
-        }
         navController.navigate(id, null, options)
     }
 
@@ -619,7 +619,6 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
         override fun onChanged(value: Folder) {
             menu.clear()
             model.actionMode.count.removeObservers(this@MainActivity)
-
             menu.add(
                 R.string.select_all,
                 R.drawable.select_all,
@@ -641,7 +640,6 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
                     menu.addExportMenu()
                     model.actionMode.count.observeCountAndPinned(this@MainActivity, share, pinned)
                 }
-
                 Folder.ARCHIVED -> {
                     menu.add(
                         R.string.unarchive,
@@ -661,7 +659,6 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
                     val share = menu.addShare()
                     model.actionMode.count.observeCountAndPinned(this@MainActivity, share, pinned)
                 }
-
                 Folder.DELETED -> {
                     menu.add(R.string.restore, R.drawable.restore, MenuItem.SHOW_AS_ACTION_ALWAYS) {
                         moveNotes(Folder.NOTES)
@@ -697,14 +694,13 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
                     val colors =
                         withContext(Dispatchers.IO) {
                             NotallyDatabase.getDatabase(
-                                    this@MainActivity,
-                                    observePreferences = false,
-                                )
+                                this@MainActivity,
+                                observePreferences = false,
+                            )
                                 .value
                                 .getBaseNoteDao()
                                 .getAllColors()
                         }
-                    // Show color as selected only if all selected notes have the same color
                     val currentColor =
                         model.actionMode.selectedNotes.values
                             .map { it.color }
@@ -729,9 +725,7 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
         }
 
         private fun Menu.addDelete(showAsAction: Int = MenuItem.SHOW_AS_ACTION_IF_ROOM): MenuItem {
-            return add(R.string.delete, R.drawable.delete, showAsAction) {
-                moveNotes(Folder.DELETED)
-            }
+            return add(R.string.delete, R.drawable.delete, showAsAction) { moveNotes(Folder.DELETED) }
         }
 
         private fun Menu.addShare(showAsAction: Int = MenuItem.SHOW_AS_ACTION_IF_ROOM): MenuItem {
@@ -745,9 +739,7 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
                 .apply {
                     setIcon(R.drawable.export)
                     item.setShowAsAction(showAsAction)
-                    ExportMimeType.entries.forEach {
-                        add(it.name).onClick { exportSelectedNotes(it) }
-                    }
+                    ExportMimeType.entries.forEach { add(it.name).onClick { exportSelectedNotes(it) } }
                 }
                 .item
         }
@@ -779,38 +771,34 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
             observeCount(lifecycleOwner, share) {
                 val baseNotes = model.actionMode.selectedNotes.values
                 if (baseNotes.any { !it.pinned }) {
-                    pinned.setTitle(R.string.pin).setIcon(R.drawable.pin).onClick {
-                        model.pinBaseNotes(true)
-                    }
+                    pinned
+                        .setTitle(R.string.pin)
+                        .setIcon(R.drawable.pin)
+                        .onClick { model.pinBaseNotes(true) }
                 } else {
-                    pinned.setTitle(R.string.unpin).setIcon(R.drawable.unpin).onClick {
-                        model.pinBaseNotes(false)
-                    }
+                    pinned
+                        .setTitle(R.string.unpin)
+                        .setIcon(R.drawable.unpin)
+                        .onClick { model.pinBaseNotes(false) }
                 }
             }
         }
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        // Only show search icon if preference is not enabled and not in Reminders or Settings
-        // fragments
         val currentDestinationId = navController.currentDestination?.id
         if (
             !preferences.alwaysShowSearchBar.value &&
-                !ACTIVITES_WITHOUT_SEARCH.contains(currentDestinationId)
+            !ACTIVITES_WITHOUT_SEARCH.contains(currentDestinationId)
         ) {
-
-            // If in Search fragment, show X icon instead of search icon
             val isInSearchFragment = currentDestinationId == R.id.Search
             val iconRes = if (isInSearchFragment) R.drawable.close else R.drawable.search
             val titleRes = if (isInSearchFragment) R.string.cancel else R.string.search
-
             menu
                 .add(Menu.NONE, ACTION_SEARCH, Menu.NONE, titleRes)
                 .setIcon(iconRes)
                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
         }
-
         return true
     }
 
@@ -818,13 +806,10 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
         return when (item.itemId) {
             ACTION_SEARCH -> {
                 val isInSearchFragment = navController.currentDestination?.id == R.id.Search
-
                 if (isInSearchFragment) {
-                    // If in Search fragment, navigate back to cancel search
                     baseModel.keyword = ""
                     navController.popBackStack()
                 } else {
-                    // Navigate to search fragment
                     val currentFragment =
                         supportFragmentManager
                             .findFragmentById(R.id.NavHostFragment)

@@ -101,18 +101,16 @@ abstract class NotallyFragment : Fragment(), ItemListener {
         openNoteActivityResultLauncher =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
                 if (result.resultCode == RESULT_OK) {
-                    // If a note has been moved inside of EditActivity
-                    // present snackbar to undo it
                     val data = result.data
                     val id = data?.getLongExtra(EXTRA_NOTE_ID, -1)
                     if (id != null) {
                         val folderFrom = Folder.valueOf(data.getStringExtra(EXTRA_FOLDER_FROM)!!)
                         val folderTo = Folder.valueOf(data.getStringExtra(EXTRA_FOLDER_TO)!!)
                         Snackbar.make(
-                                binding!!.root,
-                                requireContext().getQuantityString(folderTo.movedToResId(), 1),
-                                Snackbar.LENGTH_SHORT,
-                            )
+                            binding!!.root,
+                            requireContext().getQuantityString(folderTo.movedToResId(), 1),
+                            Snackbar.LENGTH_SHORT,
+                        )
                             .apply {
                                 setAction(R.string.undo) {
                                     model.moveBaseNotes(longArrayOf(id), folderFrom)
@@ -134,7 +132,6 @@ abstract class NotallyFragment : Fragment(), ItemListener {
         return binding?.root
     }
 
-    // See [RecyclerView.ViewHolder.getAdapterPosition]
     override fun onClick(position: Int) {
         if (position != -1) {
             notesAdapter?.getItem(position)?.let { item ->
@@ -173,20 +170,20 @@ abstract class NotallyFragment : Fragment(), ItemListener {
     override fun onLongClick(position: Int) {
         if (position != -1) {
             if (model.actionMode.selectedNotes.isNotEmpty()) {
-                if (lastSelectedNotePosition > position) {
-                        position..lastSelectedNotePosition
-                    } else {
-                        lastSelectedNotePosition..position
-                    }
-                    .forEach { pos ->
-                        notesAdapter!!.getItem(pos)?.let { item ->
-                            if (item is BaseNote) {
-                                if (!model.actionMode.selectedNotes.contains(item.id)) {
-                                    handleNoteSelection(item.id, pos, item)
-                                }
+                val range = if (lastSelectedNotePosition > position) {
+                    position..lastSelectedNotePosition
+                } else {
+                    lastSelectedNotePosition..position
+                }
+                range.forEach { pos ->
+                    notesAdapter!!.getItem(pos)?.let { item ->
+                        if (item is BaseNote) {
+                            if (!model.actionMode.selectedNotes.contains(item.id)) {
+                                handleNoteSelection(item.id, pos, item)
                             }
                         }
                     }
+                }
             } else {
                 notesAdapter?.getItem(position)?.let { item ->
                     if (item is BaseNote) {
@@ -203,13 +200,16 @@ abstract class NotallyFragment : Fragment(), ItemListener {
             val navController = findNavController()
             navController.addOnDestinationChangedListener { controller, destination, arguments ->
                 if (destination.id == R.id.Search) {
-                    // Always show search bar in Search fragment
                     binding?.EnterSearchKeywordLayout?.visibility = View.VISIBLE
                     requestFocus()
-                    activity?.showKeyboard(this)
+
+                    // 延迟 75ms 弹出键盘，确保 FAB 缩小动画先启动，避开输入法挤压布局
+                    postDelayed({
+                        activity?.showKeyboard(this)
+                    }, 75)
+
                     notesAdapter?.setSearchKeyword(model.keyword)
                 } else {
-                    // In other fragments, respect the preference
                     val alwaysShowSearchBar = model.preferences.alwaysShowSearchBar.value
                     binding?.EnterSearchKeywordLayout?.visibility =
                         if (alwaysShowSearchBar) View.VISIBLE else View.GONE
@@ -325,8 +325,6 @@ abstract class NotallyFragment : Fragment(), ItemListener {
     private fun goToActivity(activity: Class<*>, baseNote: BaseNote) {
         val intent = Intent(requireContext(), activity)
         intent.putExtra(EXTRA_SELECTED_BASE_NOTE, baseNote.id)
-        // If launched from Search fragment with a non-empty keyword, pass it to the editor to
-        // auto-highlight
         val isInSearch = view?.findNavController()?.currentDestination?.id == R.id.Search
         if (isInSearch && model.keyword.isNotBlank()) {
             intent.putExtra(EditActivity.EXTRA_INITIAL_SEARCH_QUERY, model.keyword)
