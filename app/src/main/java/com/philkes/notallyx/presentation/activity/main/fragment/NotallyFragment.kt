@@ -107,10 +107,10 @@ abstract class NotallyFragment : Fragment(), ItemListener {
                         val folderFrom = Folder.valueOf(data.getStringExtra(EXTRA_FOLDER_FROM)!!)
                         val folderTo = Folder.valueOf(data.getStringExtra(EXTRA_FOLDER_TO)!!)
                         Snackbar.make(
-                            binding!!.root,
-                            requireContext().getQuantityString(folderTo.movedToResId(), 1),
-                            Snackbar.LENGTH_SHORT,
-                        )
+                                binding!!.root,
+                                requireContext().getQuantityString(folderTo.movedToResId(), 1),
+                                Snackbar.LENGTH_SHORT,
+                            )
                             .apply {
                                 setAction(R.string.undo) {
                                     model.moveBaseNotes(longArrayOf(id), folderFrom)
@@ -170,11 +170,12 @@ abstract class NotallyFragment : Fragment(), ItemListener {
     override fun onLongClick(position: Int) {
         if (position != -1) {
             if (model.actionMode.selectedNotes.isNotEmpty()) {
-                val range = if (lastSelectedNotePosition > position) {
-                    position..lastSelectedNotePosition
-                } else {
-                    lastSelectedNotePosition..position
-                }
+                val range =
+                    if (lastSelectedNotePosition > position) {
+                        position..lastSelectedNotePosition
+                    } else {
+                        lastSelectedNotePosition..position
+                    }
                 range.forEach { pos ->
                     notesAdapter!!.getItem(pos)?.let { item ->
                         if (item is BaseNote) {
@@ -204,9 +205,7 @@ abstract class NotallyFragment : Fragment(), ItemListener {
                     requestFocus()
 
                     // 延迟 75ms 弹出键盘，确保 FAB 缩小动画先启动，避开输入法挤压布局
-                    postDelayed({
-                        activity?.showKeyboard(this)
-                    }, 75)
+                    postDelayed({ activity?.showKeyboard(this) }, 75)
 
                     notesAdapter?.setSearchKeyword(model.keyword)
                 } else {

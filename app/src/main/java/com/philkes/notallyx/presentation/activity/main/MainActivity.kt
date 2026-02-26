@@ -118,7 +118,7 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
                     }
                     if (
                         !isStartViewFragment &&
-                        !intent.getBooleanExtra(EXTRA_SKIP_START_VIEW_ON_BACK, false)
+                            !intent.getBooleanExtra(EXTRA_SKIP_START_VIEW_ON_BACK, false)
                     ) {
                         navigateToStartView()
                     } else {
@@ -325,11 +325,11 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
         labelsMoreMenuItem =
             if (labelsMenuItems.size > maxLabelsToDisplay) {
                 add(
-                    1,
-                    R.id.Labels,
-                    CATEGORY_CONTAINER + labelsMenuItems.size + 2,
-                    getString(R.string.more, labelsMenuItems.size - maxLabelsToDisplay),
-                )
+                        1,
+                        R.id.Labels,
+                        CATEGORY_CONTAINER + labelsMenuItems.size + 2,
+                        getString(R.string.more, labelsMenuItems.size - maxLabelsToDisplay),
+                    )
                     .setCheckable(true)
                     .setIcon(R.drawable.label)
             } else null
@@ -399,10 +399,10 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
             val folderFrom = baseModel.actionMode.getFirstNote().folder
             val ids = baseModel.moveBaseNotes(folderTo)
             Snackbar.make(
-                findViewById(R.id.DrawerLayout),
-                getQuantityString(folderTo.movedToResId(), ids.size),
-                Snackbar.LENGTH_SHORT,
-            )
+                    findViewById(R.id.DrawerLayout),
+                    getQuantityString(folderTo.movedToResId(), ids.size),
+                    Snackbar.LENGTH_SHORT,
+                )
                 .apply { setAction(R.string.undo) { baseModel.moveBaseNotes(ids, folderFrom) } }
                 .show()
         } finally {
@@ -520,7 +520,7 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
                 override fun onDrawerClosed(drawerView: View) {
                     if (
                         fragmentIdToLoad != null &&
-                        navController.currentDestination?.id != fragmentIdToLoad
+                            navController.currentDestination?.id != fragmentIdToLoad
                     ) {
                         navigateWithAnimation(
                             requireNotNull(fragmentIdToLoad, { "fragmentIdToLoad is null" })
@@ -558,7 +558,9 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
             }
 
             when (destination.id) {
-                R.id.Notes, R.id.DisplayLabel, R.id.Unlabeled -> {
+                R.id.Notes,
+                R.id.DisplayLabel,
+                R.id.Unlabeled -> {
                     binding.TakeNote.show()
                     binding.MakeList.show()
                 }
@@ -574,22 +576,21 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
     private fun isStartViewFragment(id: Int, bundle: Bundle?): Boolean {
         val (startViewId, startViewBundle) = getStartViewNavigation()
         return startViewId == id &&
-                startViewBundle.getString(EXTRA_DISPLAYED_LABEL) ==
+            startViewBundle.getString(EXTRA_DISPLAYED_LABEL) ==
                 bundle?.getString(EXTRA_DISPLAYED_LABEL)
     }
 
     private fun navigateWithAnimation(id: Int) {
-        val options =
-            navOptions {
-                launchSingleTop = true
-                anim {
-                    exit = androidx.navigation.ui.R.anim.nav_default_exit_anim
-                    enter = androidx.navigation.ui.R.anim.nav_default_enter_anim
-                    popExit = androidx.navigation.ui.R.anim.nav_default_pop_exit_anim
-                    popEnter = androidx.navigation.ui.R.anim.nav_default_pop_enter_anim
-                }
-                popUpTo(navController.graph.startDestination) { inclusive = false }
+        val options = navOptions {
+            launchSingleTop = true
+            anim {
+                exit = androidx.navigation.ui.R.anim.nav_default_exit_anim
+                enter = androidx.navigation.ui.R.anim.nav_default_enter_anim
+                popExit = androidx.navigation.ui.R.anim.nav_default_pop_exit_anim
+                popEnter = androidx.navigation.ui.R.anim.nav_default_pop_enter_anim
             }
+            popUpTo(navController.graph.startDestination) { inclusive = false }
+        }
         navController.navigate(id, null, options)
     }
 
@@ -694,9 +695,9 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
                     val colors =
                         withContext(Dispatchers.IO) {
                             NotallyDatabase.getDatabase(
-                                this@MainActivity,
-                                observePreferences = false,
-                            )
+                                    this@MainActivity,
+                                    observePreferences = false,
+                                )
                                 .value
                                 .getBaseNoteDao()
                                 .getAllColors()
@@ -725,7 +726,9 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
         }
 
         private fun Menu.addDelete(showAsAction: Int = MenuItem.SHOW_AS_ACTION_IF_ROOM): MenuItem {
-            return add(R.string.delete, R.drawable.delete, showAsAction) { moveNotes(Folder.DELETED) }
+            return add(R.string.delete, R.drawable.delete, showAsAction) {
+                moveNotes(Folder.DELETED)
+            }
         }
 
         private fun Menu.addShare(showAsAction: Int = MenuItem.SHOW_AS_ACTION_IF_ROOM): MenuItem {
@@ -739,7 +742,9 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
                 .apply {
                     setIcon(R.drawable.export)
                     item.setShowAsAction(showAsAction)
-                    ExportMimeType.entries.forEach { add(it.name).onClick { exportSelectedNotes(it) } }
+                    ExportMimeType.entries.forEach {
+                        add(it.name).onClick { exportSelectedNotes(it) }
+                    }
                 }
                 .item
         }
@@ -771,15 +776,13 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
             observeCount(lifecycleOwner, share) {
                 val baseNotes = model.actionMode.selectedNotes.values
                 if (baseNotes.any { !it.pinned }) {
-                    pinned
-                        .setTitle(R.string.pin)
-                        .setIcon(R.drawable.pin)
-                        .onClick { model.pinBaseNotes(true) }
+                    pinned.setTitle(R.string.pin).setIcon(R.drawable.pin).onClick {
+                        model.pinBaseNotes(true)
+                    }
                 } else {
-                    pinned
-                        .setTitle(R.string.unpin)
-                        .setIcon(R.drawable.unpin)
-                        .onClick { model.pinBaseNotes(false) }
+                    pinned.setTitle(R.string.unpin).setIcon(R.drawable.unpin).onClick {
+                        model.pinBaseNotes(false)
+                    }
                 }
             }
         }
@@ -789,7 +792,7 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
         val currentDestinationId = navController.currentDestination?.id
         if (
             !preferences.alwaysShowSearchBar.value &&
-            !ACTIVITES_WITHOUT_SEARCH.contains(currentDestinationId)
+                !ACTIVITES_WITHOUT_SEARCH.contains(currentDestinationId)
         ) {
             val isInSearchFragment = currentDestinationId == R.id.Search
             val iconRes = if (isInSearchFragment) R.drawable.close else R.drawable.search
