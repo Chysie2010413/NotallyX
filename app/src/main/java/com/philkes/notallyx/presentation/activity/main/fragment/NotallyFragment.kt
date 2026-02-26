@@ -204,7 +204,8 @@ abstract class NotallyFragment : Fragment(), ItemListener {
                     binding?.EnterSearchKeywordLayout?.visibility = View.VISIBLE
                     requestFocus()
 
-                    // 延迟 75ms 弹出键盘，确保 FAB 缩小动画先启动，避开输入法挤压布局
+                    // 75ms delay to prioritize FAB shrink animation and prevent layout compression
+                    // by the IME.
                     postDelayed({ activity?.showKeyboard(this) }, 75)
 
                     notesAdapter?.setSearchKeyword(model.keyword)

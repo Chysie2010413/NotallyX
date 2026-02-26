@@ -171,7 +171,7 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
             val systemBarsInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
 
-            // 检查当前是否在搜索页面
+            // Check if currently on the search page
             val isInSearch = navController.currentDestination?.id == R.id.Search
 
             binding.Toolbar.apply {
@@ -191,7 +191,7 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
 
             binding.TakeNote.apply {
                 val marginLayoutParams = layoutParams as ViewGroup.MarginLayoutParams
-                // 如果是搜索页，锁定位置（不加键盘高度）；否则正常随键盘弹起
+                // Lock position if on search page (ignore keyboard); otherwise, move with keyboard.
                 val finalBottomIme = if (isInSearch) 0 else imeInsets.bottom
                 marginLayoutParams.bottomMargin = 16.dp + systemBarsInsets.bottom + finalBottomIme
                 marginLayoutParams.marginEnd = 16.dp
@@ -199,7 +199,8 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
             }
 
             navHostFragment.apply {
-                // 如果是搜索页，锁定底部内边距，防止内容被顶起压缩
+                // Fix bottom padding on search page to prevent layout compression when keyboard
+                // appears.
                 val finalBottomIme = if (isInSearch) 0 else imeInsets.bottom
                 setPadding(
                     paddingLeft,
@@ -550,7 +551,7 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
                 }
             }
 
-            // 搜索页特殊处理：锁定输入法模式为平移，避免图标被顶起
+            // Search page special case: Lock soft input mode to adjustPan to keep icons in place.
             if (destination.id == R.id.Search) {
                 window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN)
             } else {
